@@ -18,7 +18,7 @@ const DEFAULT_CUSTOM_PROJECT: VideoProject = {
   title: "AstroGatto e l'Alieno dei Cristalli di Luna",
   aspectRatio: "16:9",
   bgMusic: "ambient",
-  bgMusicVolume: 0.15,
+  bgMusicVolume: 0.45,
   voiceName: "Kore",
   language: "it",
   segments: [
@@ -111,6 +111,7 @@ export default function App() {
 
   // Audio elements
   const activeSegmentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsTimeoutRef = useRef<any>(null);
 
   // Keep references to state so interval never uses stale closure values
   const projectRef = useRef<VideoProject>(project);
@@ -133,19 +134,9 @@ export default function App() {
     return audioContextRef.current;
   };
 
-  // Coordinated playback looping and slide sync
+  // Coordinated playback looping and slide sync (interval & voiceover triggers)
   useEffect(() => {
     if (isPlaying) {
-      try {
-        const ctx = initAudioCtx();
-        if (ctx && projectRef.current.bgMusic !== 'none') {
-          if (synthHandleRef.current) synthHandleRef.current.stop();
-          synthHandleRef.current = playSynthMusic(ctx, projectRef.current.bgMusic as any, projectRef.current.bgMusicVolume);
-        }
-      } catch (err) {
-        console.warn("Synthesizer audio auto-access blocked in container iframe:", err);
-      }
-
       playStartTimeRef.current = Date.now();
       playStartOffsetRef.current = currentTime;
 
@@ -166,6 +157,7 @@ export default function App() {
           (seg) => nextTime >= seg.startTime && nextTime < seg.endTime
         );
         if (matchIdx !== -1 && matchIdx !== activeIdxRef.current) {
+          activeIdxRef.current = matchIdx; // Update immediately inside sync loop to prevent downstream re-trigger race conditions before React renders!
           setActiveIdx(matchIdx);
           triggerCustomAudioOrTts(matchIdx);
         }
@@ -174,22 +166,59 @@ export default function App() {
       triggerCustomAudioOrTts(activeIdxRef.current);
     } else {
       if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-      if (synthHandleRef.current) {
-        synthHandleRef.current.stop();
-        synthHandleRef.current = null;
-      }
       stopVocalTracks();
     }
 
     return () => {
       if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      stopVocalTracks();
+    };
+  }, [isPlaying]);
+
+  // Synchronized background music synthesizer lifecycle
+  useEffect(() => {
+    if (isPlaying) {
+      try {
+        const ctx = initAudioCtx();
+        if (ctx) {
+          if (ctx.state === 'suspended') {
+            ctx.resume();
+          }
+          if (synthHandleRef.current) {
+            synthHandleRef.current.stop();
+            synthHandleRef.current = null;
+          }
+          if (project.bgMusic !== 'none') {
+            const musicSource = project.bgMusic === 'custom' ? (project.customBgMusicUrl || '') : project.bgMusic;
+            if (musicSource) {
+              synthHandleRef.current = playSynthMusic(ctx, musicSource, project.bgMusicVolume);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Error starting background music synthesizer:", err);
+      }
+    } else {
       if (synthHandleRef.current) {
         synthHandleRef.current.stop();
         synthHandleRef.current = null;
       }
-      stopVocalTracks();
+    }
+
+    return () => {
+      if (synthHandleRef.current) {
+        synthHandleRef.current.stop();
+        synthHandleRef.current = null;
+      }
     };
-  }, [isPlaying]);
+  }, [isPlaying, project.bgMusic, project.customBgMusicUrl]);
+
+  // Dynamic continuous volume slider adjustments with no sound interruption
+  useEffect(() => {
+    if (isPlaying && synthHandleRef.current) {
+      synthHandleRef.current.setVolume(project.bgMusicVolume);
+    }
+  }, [project.bgMusicVolume, isPlaying]);
 
   const triggerCustomAudioOrTts = (idx: number) => {
     stopVocalTracks();
@@ -215,13 +244,16 @@ export default function App() {
 
   const triggerLocalTTS = (text: string) => {
     if ('speechSynthesis' in window && text.trim()) {
+      if (ttsTimeoutRef.current) {
+        clearTimeout(ttsTimeoutRef.current);
+      }
       try {
         window.speechSynthesis.cancel();
         window.speechSynthesis.resume();
       } catch (e) {}
 
       // A small delay solves the Chrome cancel-speak silence race condition perfectly
-      setTimeout(() => {
+      ttsTimeoutRef.current = setTimeout(() => {
         try {
           const utterance = new SpeechSynthesisUtterance(text);
           
@@ -255,6 +287,10 @@ export default function App() {
   };
 
   const stopVocalTracks = () => {
+    if (ttsTimeoutRef.current) {
+      clearTimeout(ttsTimeoutRef.current);
+      ttsTimeoutRef.current = null;
+    }
     if (activeSegmentAudioRef.current) {
       try {
         activeSegmentAudioRef.current.pause();
@@ -273,8 +309,15 @@ export default function App() {
     stopVocalTracks();
   };
 
-  const togglePlay = () => {
-    initAudioCtx();
+  const togglePlay = async () => {
+    try {
+      const ctx = initAudioCtx();
+      if (ctx && ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+    } catch (e) {
+      console.warn("AudioContext resume failed:", e);
+    }
     setIsPlaying(!isPlaying);
   };
 
@@ -716,6 +759,13 @@ export default function App() {
 
   const startScreenCaptureExporter = async () => {
     try {
+      try {
+        const ctx = initAudioCtx();
+        if (ctx && ctx.state === 'suspended') {
+          await ctx.resume();
+        }
+      } catch (e) {}
+
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         alert("La cattura video dello schermo richiede l'apertura a schermo intero cliccando sul link verde 'Shared App URL' o 'Apri applicazione'!");
         return;
@@ -1783,6 +1833,51 @@ export default function App() {
                     ))}
                   </select>
 
+                  {project.bgMusic === 'custom' && (
+                    <div className="space-y-2 mt-2 bg-black/45 p-2.5 rounded-lg border border-indigo-500/15">
+                      <label id="lbl-custom-bg-music" className="text-[10px] text-indigo-300 font-semibold block">
+                        Incolla il link (URL) del file MP3 della musica:
+                      </label>
+                      <input
+                        id="input-custom-bg-music"
+                        type="text"
+                        placeholder="Esempio: https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                        className="w-full bg-[#0d0d12] border border-white/10 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50"
+                        value={project.customBgMusicUrl || ''}
+                        onChange={(e) => setProject({ ...project, customBgMusicUrl: e.target.value })}
+                      />
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-slate-400 font-medium block">Link di test alternativi funzionanti (Clicca per inserire):</span>
+                        <div className="grid grid-cols-1 gap-1">
+                          <button
+                            id="btn-music-lnk-1"
+                            type="button"
+                            onClick={() => setProject({ ...project, customBgMusicUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' })}
+                            className="bg-slate-900 hover:bg-slate-800 text-[9.5px] text-left text-slate-300 px-2 py-1 rounded truncate border border-white/5 transition-colors"
+                          >
+                            🎵 SoundHelix Traccia 1 (Sinfonia Ambient Rock)
+                          </button>
+                          <button
+                            id="btn-music-lnk-4"
+                            type="button"
+                            onClick={() => setProject({ ...project, customBgMusicUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' })}
+                            className="bg-slate-900 hover:bg-slate-800 text-[9.5px] text-left text-slate-300 px-2 py-1 rounded truncate border border-white/5 transition-colors"
+                          >
+                            🎵 SoundHelix Traccia 4 (Synth Progressivo)
+                          </button>
+                          <button
+                            id="btn-music-lnk-8"
+                            type="button"
+                            onClick={() => setProject({ ...project, customBgMusicUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3' })}
+                            className="bg-slate-900 hover:bg-slate-800 text-[9.5px] text-left text-slate-300 px-2 py-1 rounded truncate border border-white/5 transition-colors"
+                          >
+                            🎵 SoundHelix Traccia 8 (Elettronica Chillout)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-1 mt-1">
                     <div className="flex justify-between text-[9.5px] text-slate-400 font-bold">
                       <span>Volume Sottofondo:</span>
@@ -2094,10 +2189,7 @@ export default function App() {
           <div className="w-full max-w-4xl bg-[#111113] p-3 rounded-2xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => {
-                  setIsPlaying(!isPlaying);
-                  initAudioCtx();
-                }}
+                onClick={togglePlay}
                 className="p-1.5 px-4 bg-indigo-600 hover:bg-indigo-505 text-white rounded-lg text-xs font-black transition flex items-center gap-1 cursor-pointer"
                 type="button"
               >

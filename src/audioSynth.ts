@@ -20,19 +20,36 @@ const STYLE_TRACKS: Record<string, string> = {
 
 export function playSynthMusic(
   audioCtx: any, // Kept signature for backwards compatibility but not used
-  type: string,
+  typeOrUrl: string,
   initialVolumeValue: number
 ): SynthHandle {
   // Normalize types
-  let resolvedType = type === 'ambient' ? 'dreamy' : type;
-  if (resolvedType === 'none' || !STYLE_TRACKS[resolvedType]) {
+  let trackUrl = "";
+  
+  if (
+    typeOrUrl.startsWith("http://") || 
+    typeOrUrl.startsWith("https://") || 
+    typeOrUrl.startsWith("data:")
+  ) {
+    trackUrl = typeOrUrl;
+  } else {
+    let resolvedType = typeOrUrl === 'ambient' ? 'dreamy' : typeOrUrl;
+    if (resolvedType === 'none') {
+      return {
+        stop: () => {},
+        setVolume: () => {},
+      };
+    }
+    trackUrl = STYLE_TRACKS[resolvedType] || "";
+  }
+
+  if (!trackUrl) {
     return {
       stop: () => {},
       setVolume: () => {},
     };
   }
 
-  const trackUrl = STYLE_TRACKS[resolvedType];
   const audio = new Audio();
   audio.src = trackUrl;
   audio.loop = true;
