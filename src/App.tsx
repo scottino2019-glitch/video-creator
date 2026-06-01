@@ -183,12 +183,17 @@ export default function App() {
 
     return () => {
       if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      if (synthHandleRef.current) {
+        synthHandleRef.current.stop();
+        synthHandleRef.current = null;
+      }
+      stopVocalTracks();
     };
   }, [isPlaying]);
 
   const triggerCustomAudioOrTts = (idx: number) => {
     stopVocalTracks();
-    const segment = project.segments[idx];
+    const segment = projectRef.current.segments[idx];
     if (!segment) return;
 
     if (segment.audioUrl) {
