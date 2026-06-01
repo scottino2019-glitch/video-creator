@@ -13,9 +13,9 @@ export interface SynthHandle {
 
 // Map styles to premium, highly accessible royalty-free mp3 tracks (lightweight Mixkit previews)
 const STYLE_TRACKS: Record<string, string> = {
-  dreamy: "https://assets.mixkit.co/music/preview/mixkit-forest-lullaby-1106.mp3",
-  cinematic: "https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3",
-  upbeat: "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3"
+  dreamy: "https://upload.wikimedia.org/wikipedia/commons/1/1c/Rivernoise2.ogg",
+  cinematic: "https://upload.wikimedia.org/wikipedia/commons/1/11/20221229_-_Abisko_Turiststation_at_night_-_Wind_and_snow.wav",
+  upbeat: "https://upload.wikimedia.org/wikipedia/commons/d/dc/African_Thrush_%28Turdus_pelios%29_%28022A-WA03044X0015-0017M0%29.ogg"
 };
 
 export function playSynthMusic(
