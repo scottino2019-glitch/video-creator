@@ -1,0 +1,6 @@
+{
+  "name": "Sincronizzatore Video Audio AI",
+  "description": "Crea video con immagini animate e testi sincronizzati automaticamente con una traccia audio o narrazione generata dall'AI",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
