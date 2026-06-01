@@ -112,6 +112,17 @@ export default function App() {
   // Audio elements
   const activeSegmentAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Keep references to state so interval never uses stale closure values
+  const projectRef = useRef<VideoProject>(project);
+  const activeIdxRef = useRef<number>(activeIdx);
+  const totalDurationRef = useRef<number>(totalDuration);
+
+  useEffect(() => {
+    projectRef.current = project;
+    activeIdxRef.current = activeIdx;
+    totalDurationRef.current = totalDuration;
+  });
+
   const initAudioCtx = () => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -127,9 +138,9 @@ export default function App() {
     if (isPlaying) {
       try {
         const ctx = initAudioCtx();
-        if (ctx && project.bgMusic !== 'none') {
+        if (ctx && projectRef.current.bgMusic !== 'none') {
           if (synthHandleRef.current) synthHandleRef.current.stop();
-          synthHandleRef.current = playSynthMusic(ctx, project.bgMusic as any, project.bgMusicVolume);
+          synthHandleRef.current = playSynthMusic(ctx, projectRef.current.bgMusic as any, projectRef.current.bgMusicVolume);
         }
       } catch (err) {
         console.warn("Synthesizer audio auto-access blocked in container iframe:", err);
@@ -142,7 +153,7 @@ export default function App() {
         const elapsed = (Date.now() - playStartTimeRef.current) / 1000;
         let nextTime = playStartOffsetRef.current + elapsed;
 
-        if (nextTime >= totalDuration) {
+        if (nextTime >= totalDurationRef.current) {
           nextTime = 0;
           stopAllPlaying();
           return;
@@ -151,16 +162,16 @@ export default function App() {
         setCurrentTime(nextTime);
 
         // Find active segment sequentially
-        const matchIdx = project.segments.findIndex(
+        const matchIdx = projectRef.current.segments.findIndex(
           (seg) => nextTime >= seg.startTime && nextTime < seg.endTime
         );
-        if (matchIdx !== -1 && matchIdx !== activeIdx) {
+        if (matchIdx !== -1 && matchIdx !== activeIdxRef.current) {
           setActiveIdx(matchIdx);
           triggerCustomAudioOrTts(matchIdx);
         }
       }, 40);
 
-      triggerCustomAudioOrTts(activeIdx);
+      triggerCustomAudioOrTts(activeIdxRef.current);
     } else {
       if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
       if (synthHandleRef.current) {
