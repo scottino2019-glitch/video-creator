@@ -68,9 +68,9 @@ export interface StockMusicTrack {
 
 export const STOCK_MUSIC_TRACKS: StockMusicTrack[] = [
   { id: 'none', name: 'Nessuna Musica', style: 'Silenzioso', url: '', synthType: 'none' },
-  { id: 'ambient', name: 'Flusso Space Sognante', style: 'Ambient Stellare, Rilassante', url: '', synthType: 'dreamy' },
-  { id: 'cinematic', name: 'Odissea Orbitale', style: 'Cinematografico, Epico', url: '', synthType: 'cinematic' },
-  { id: 'upbeat', name: 'Retro Synthwave', style: 'Sintetizzatore, Ritmo Energico', url: '', synthType: 'upbeat' },
+  { id: 'ambient', name: 'Flusso Space Sognante', style: 'Acqua', url: '', synthType: 'dreamy' },
+  { id: 'cinematic', name: 'Odissea Orbitale', style: 'Cinematografico,', url: '', synthType: 'cinematic' },
+  { id: 'upbeat', name: 'Retro Synthwave', style: 'Natura', url: '', synthType: 'upbeat' },
   { id: 'custom', name: 'Altra Musica (Link MP3/Audio)', style: 'Link inserito da te', url: '', synthType: 'none' }
 ];
 
@@ -98,5 +98,5 @@ export const CHARACTER_PRESETS: CharacterPreset[] = [
 export const STICKER_CATEGORIES = {
   emotions: ["❤️", "💖", "🔥", "✨", "🌟", "🎉", "💥", "💯", "💬", "💭"],
   nature: ["🌲", "🍀", "🌸", "☀️", "🌙", "☁️", "🌊", "❄️", "🌋", "☄️"],
-  objects: ["🚗", "🚀", "🛸", "🎒", "🏺", "💎", "💻", "🎨", "🎭", "👑"],
+  objects: ["🚗", "🚀", "🛸", "🎒", "🏺", "💎", "💻", "🎨", "🎭", "👑", "📱"],
 };
