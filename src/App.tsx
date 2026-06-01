@@ -91,6 +91,10 @@ export default function App() {
   // Selection target
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
 
+  // System voices from browser for SpeechSynthesis
+  const [systemVoices, setSystemVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [showAllLanguages, setShowAllLanguages] = useState<boolean>(false);
+
   // Errors feedback
   const [audioError, setAudioError] = useState<string>('');
   const [imageError, setImageError] = useState<string>('');
@@ -123,6 +127,32 @@ export default function App() {
     activeIdxRef.current = activeIdx;
     totalDurationRef.current = totalDuration;
   });
+
+  // Populate actual system voices asynchronously on mount
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      const updateVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        setSystemVoices(voices);
+      };
+      updateVoices();
+      // Chrome/Android can be asynchronous with loading voices
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
+  // Auto select appropriate voice when systemVoices or project language changes
+  useEffect(() => {
+    if (systemVoices.length > 0) {
+      const matching = systemVoices.filter(v => v.lang.toLowerCase().startsWith(project.language.toLowerCase()));
+      if (matching.length > 0) {
+        const isCurrentMatching = matching.some(v => v.name === project.voiceName || v.voiceURI === project.voiceName);
+        if (!isCurrentMatching) {
+          setProject(prev => ({ ...prev, voiceName: matching[0].name }));
+        }
+      }
+    }
+  }, [project.language, systemVoices]);
 
   const initAudioCtx = () => {
     if (!audioContextRef.current) {
@@ -257,17 +287,35 @@ export default function App() {
         try {
           const utterance = new SpeechSynthesisUtterance(text);
           
-          if (project.language === 'it') utterance.lang = 'it-IT';
-          else if (project.language === 'en') utterance.lang = 'en-US';
-          else if (project.language === 'es') utterance.lang = 'es-ES';
-          else if (project.language === 'fr') utterance.lang = 'fr-FR';
-          else if (project.language === 'de') utterance.lang = 'de-DE';
-          else if (project.language === 'ja') utterance.lang = 'ja-JP';
-          else if (project.language === 'zh') utterance.lang = 'zh-CN';
-          else if (project.language === 'ko') utterance.lang = 'ko-KR';
-          else utterance.lang = 'it-IT';
+          const voices = window.speechSynthesis.getVoices();
+          const targetVoice = voices.find(v => v.name === projectRef.current.voiceName || v.voiceURI === projectRef.current.voiceName);
+          
+          if (targetVoice) {
+            utterance.voice = targetVoice;
+            utterance.lang = targetVoice.lang;
+          } else {
+            // Find any fallback voice matching the selected language prefix
+            const langPrefix = projectRef.current.language.toLowerCase();
+            const fallbackVoice = voices.find(v => v.lang.toLowerCase().startsWith(langPrefix));
+            if (fallbackVoice) {
+              utterance.voice = fallbackVoice;
+              utterance.lang = fallbackVoice.lang;
+            } else {
+              // Standard string fallback
+              if (projectRef.current.language === 'it') utterance.lang = 'it-IT';
+              else if (projectRef.current.language === 'en') utterance.lang = 'en-US';
+              else if (projectRef.current.language === 'es') utterance.lang = 'es-ES';
+              else if (projectRef.current.language === 'fr') utterance.lang = 'fr-FR';
+              else if (projectRef.current.language === 'de') utterance.lang = 'de-DE';
+              else if (projectRef.current.language === 'ja') utterance.lang = 'ja-JP';
+              else if (projectRef.current.language === 'zh') utterance.lang = 'zh-CN';
+              else if (projectRef.current.language === 'ko') utterance.lang = 'ko-KR';
+              else utterance.lang = 'it-IT';
+            }
+          }
 
-          utterance.rate = 1.05;
+          utterance.rate = 1.0; // Standard pitch & speed avoids robotic distortion
+          utterance.pitch = 1.0;
           
           // Chrome garbage collection workaround
           (window as any)._activeUtterance = utterance;
@@ -1786,15 +1834,51 @@ export default function App() {
 
                   <div className="space-y-1">
                     <span className="text-[10px] text-slate-300 font-semibold block">Voce Doppiatore TTS offline:</span>
-                    <select
-                      className="w-full bg-[#08080a] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                      value={project.voiceName}
-                      onChange={(e) => setProject({ ...project, voiceName: e.target.value })}
-                    >
-                      {SUPPORTED_VOICES.map(v => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
-                      ))}
-                    </select>
+                    {systemVoices.length > 0 ? (
+                      <>
+                        <select
+                          id="select-voice-dropdown"
+                          className="w-full bg-[#08080a] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                          value={project.voiceName}
+                          onChange={(e) => setProject({ ...project, voiceName: e.target.value })}
+                        >
+                          {(() => {
+                            const matching = systemVoices.filter(v => 
+                              v.lang.toLowerCase().startsWith(project.language.toLowerCase())
+                            );
+                            const list = showAllLanguages ? systemVoices : (matching.length > 0 ? matching : systemVoices);
+                            const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name));
+                            return sorted.map(v => (
+                              <option key={v.voiceURI || v.name} value={v.name}>
+                                {v.name} ({v.lang}) {v.localService ? '⏱️ Semplice' : '🌐 Sintetizzata'}
+                              </option>
+                            ));
+                          })()}
+                        </select>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <input
+                            type="checkbox"
+                            id="chk-show-all-voices"
+                            checked={showAllLanguages}
+                            onChange={(e) => setShowAllLanguages(e.target.checked)}
+                            className="bg-[#08080a] border-white/15 text-indigo-600 rounded focus:ring-indigo-500 w-3 h-3 cursor-pointer"
+                          />
+                          <label htmlFor="chk-show-all-voices" className="text-[9.5px] text-slate-400 select-none cursor-pointer">
+                            Mostra voci di tutte le lingue
+                          </label>
+                        </div>
+                      </>
+                    ) : (
+                      <select
+                        className="w-full bg-[#08080a] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                        value={project.voiceName}
+                        onChange={(e) => setProject({ ...project, voiceName: e.target.value })}
+                      >
+                        {SUPPORTED_VOICES.map(v => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   <div className="space-y-1 block">
